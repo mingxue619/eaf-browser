@@ -505,9 +505,15 @@ class AppBuffer(BrowserBuffer):
         try:
             noprefix_new_url_match = re.match(self.noprefix_url_pattern, new_url)
             if noprefix_new_url_match is not None:
+                record_list = []
+                current_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+                record_list.append({
+                    "time": current_time,
+                    "title": new_title,
+                    "url": new_url
+                })
                 touch(self.history_record_file_path)
                 with open(self.history_record_file_path, "r+", encoding="utf-8") as f:
-                    record_list = []
                     raw_list = f.readlines()
                     for raw_his in raw_list:
                         his_line = re.match(self.history_pattern, raw_his)
@@ -538,12 +544,6 @@ class AppBuffer(BrowserBuffer):
                         }
                         record_list.append(history_record)
 
-                    current_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-                    record_list.append({
-                        "time": current_time,
-                        "title": new_title,
-                        "url": new_url
-                    })
                     lines = map(lambda record: str(record['time']) + "ᛝ" + record['title'] + "ᛡ" + record['url'] + "\n", record_list)
                     f.seek(0)
                     f.writelines(lines)
