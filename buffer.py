@@ -204,6 +204,7 @@ class AppBuffer(BrowserBuffer):
         self.history_list = []
         if self.remember_history:
             self.history_log_file_path = os.path.join(self.config_dir, "browser", "history", "log.txt")
+            self.history_record_file_path = os.path.join(self.config_dir, "browser", "history", "record.txt")
 
             self.history_pattern = re.compile(r"^(.+)ᛝ(.+)ᛡ(.+)$")
             self.noprefix_url_pattern = re.compile(r"^(https?|file)://(.+)")
@@ -500,12 +501,65 @@ class AppBuffer(BrowserBuffer):
             import traceback
             message_to_emacs("Error in record_history: " + str(traceback.print_exc()))
 
+    def _refresh_history_record(self, new_title, new_url):
+        try:
+            noprefix_new_url_match = re.match(self.noprefix_url_pattern, new_url)
+            if noprefix_new_url_match is not None:
+                touch(self.history_record_file_path)
+                with open(self.history_record_file_path, "r+", encoding="utf-8") as f:
+                    record_list = []
+                    raw_list = f.readlines()
+                    for raw_his in raw_list:
+                        his_line = re.match(self.history_pattern, raw_his)
+                        if his_line is None:
+                            continue
+                        record_time = his_line.group(1)
+                        record_title = his_line.group(2)
+                        record_url = his_line.group(3)
+
+                        # 非url
+                        noprefix_url_match = re.match(self.noprefix_url_pattern, record_url)
+                        if noprefix_url_match is None:
+                            continue
+
+                        if new_url == record_url:
+                            continue
+
+                        noprefix_url = noprefix_url_match.group(2)
+                        noprefix_new_url = noprefix_new_url_match.group(2)
+                        # 去除协议后相同 # http::xxx == https:xxx
+                        if noprefix_url == noprefix_new_url: 
+                            continue
+
+                        history_record = {
+                            "time":record_time,
+                            "title": record_title,
+                            "url": record_url
+                        }
+                        record_list.append(history_record)
+
+                    current_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+                    record_list.append({
+                        "time": current_time,
+                        "title": new_title,
+                        "url": new_url
+                    })
+                    lines = map(lambda record: str(record['time']) + "ᛝ" + record['title'] + "ᛡ" + record['url'] + "\n", record_list)
+                    f.seek(0)
+                    f.writelines(lines)
+                    f.truncate()
+        except Exception as e:
+            import traceback
+            # message_to_emacs("Error in refresh_history: " + str(traceback.print_exc()))
+            message_to_emacs("Error in refresh_history: " + str(e))
+
     def record_history(self, new_title):
         ''' Record browser history.'''
         new_url = self.buffer_widget.filter_url(self.buffer_widget.get_url())
         if self.remember_history and self.buffer_widget.filter_title(new_title) != "" and \
            self.arguments != "temp_html_file" and new_title != "about:blank" and new_url != "about:blank":
             self._record_history(new_title, new_url)
+            self._refresh_history_record(new_title, new_url)
 
     @interactive(insert_or_do=True)
     def new_blank_page(self):
